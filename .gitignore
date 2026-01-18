@@ -1,0 +1,80 @@
+# Environment variables (CRITICAL - Never commit!)
+.env
+.env.local
+.env.production
+.env.development
+.env.test
+# BUT keep .env.example for reference
+!.env.example
+
+# Secrets and keys
+secrets/
+*.key
+*.pem
+*token*
+
+# Generated applications and test outputs
+generated_apps/
+generated_*/
+*_output_*.json
+response*.json
+latest_test.txt
+test_output.txt
+
+# Test files (keep in repo but exclude from deployment)
+# test_*.py files are kept for reference
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Database
+*.db
+*.sqlite3
+
+# Claude Code artifacts
+.claude/

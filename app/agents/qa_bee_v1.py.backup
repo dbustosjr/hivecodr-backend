@@ -1,0 +1,581 @@
+"""QA Bee Agent - Generates comprehensive pytest test suites for backend code."""
+
+from crewai import Agent, Task, Crew
+from typing import Dict, Any
+import json
+from pathlib import Path
+import time
+from anthropic import Anthropic
+import os
+
+
+class QABeeAgent:
+    """
+    QA Bee Agent that generates comprehensive pytest test suites for backend code.
+
+    Generates 4 test files:
+    - test_models.py: Unit tests for SQLAlchemy models
+    - test_schemas.py: Pydantic schema validation tests
+    - test_routes.py: Integration tests for API endpoints
+    - conftest.py: pytest fixtures and test configuration
+    """
+
+    def __init__(self):
+        """Initialize QA Bee with CrewAI and Claude API configurations."""
+        self.model = "claude-sonnet-4-20250514"
+        self.anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+    def _generate_test_files_chunked(
+        self,
+        backend_code: Dict[str, str],
+        architecture_spec: Dict[str, Any],
+        requirements: str
+    ) -> Dict[str, str]:
+        """
+        Generate test files separately for better reliability and coverage.
+
+        Args:
+            backend_code: Dictionary containing models, schemas, routes code
+            architecture_spec: Architecture specification from Architect Bee
+            requirements: Original user requirements
+
+        Returns:
+            Dictionary mapping test filenames to their content
+        """
+        print("[CHUNKED TEST GENERATION] Generating test files separately for comprehensive coverage...")
+
+        generated_tests = {}
+        spec_json = json.dumps(architecture_spec, indent=2)
+
+        # Prepare backend code context
+        models_code = backend_code.get("models", "")
+        schemas_code = backend_code.get("schemas", "")
+        routes_code = backend_code.get("routes", "")
+
+        # Step 1/4: Generate conftest.py first (needed for other tests)
+        print("[CHUNKED] Step 1/4: Generating conftest.py...")
+        try:
+            conftest_prompt = f"""
+Generate a comprehensive conftest.py file for pytest testing of a FastAPI application.
+
+BACKEND CODE CONTEXT:
+Models: {len(models_code)} characters
+Schemas: {len(schemas_code)} characters
+Routes: {len(routes_code)} characters
+
+ARCHITECTURE SPECIFICATION:
+{spec_json}
+
+REQUIREMENTS:
+{requirements}
+
+Create a conftest.py file with:
+1. Database fixtures (test database setup/teardown)
+2. SQLAlchemy session fixtures (create test tables, cleanup)
+3. FastAPI TestClient fixture
+4. Authentication fixtures (if applicable)
+5. Sample data fixtures for common test scenarios
+6. Pytest configuration
+
+Best practices:
+- Use in-memory SQLite for fast tests
+- Proper cleanup with yield fixtures
+- Scope fixtures appropriately (function, module, session)
+- Include docstrings explaining each fixture
+- Create fixtures for common test data (users, posts, etc.)
+
+Return ONLY the Python code for conftest.py, no JSON, no markdown, just the code.
+"""
+            response = self.anthropic_client.messages.create(
+                model=self.model,
+                max_tokens=8000,
+                messages=[{"role": "user", "content": conftest_prompt}]
+            )
+            conftest_code = response.content[0].text.strip()
+
+            # Clean up markdown
+            if "```python" in conftest_code:
+                conftest_code = conftest_code.split("```python")[1].split("```")[0].strip()
+            elif "```" in conftest_code:
+                conftest_code = conftest_code.split("```")[1].split("```")[0].strip()
+
+            generated_tests["conftest"] = conftest_code
+            print(f"[CHUNKED] conftest.py: {len(conftest_code)} characters")
+
+        except Exception as e:
+            print(f"[ERROR] Failed to generate conftest.py: {str(e)[:100]}")
+            generated_tests["conftest"] = "# Error generating conftest.py"
+
+        # Step 2/4: Generate test_models.py
+        print("[CHUNKED] Step 2/4: Generating test_models.py...")
+        try:
+            test_models_prompt = f"""
+Generate comprehensive unit tests for SQLAlchemy models in test_models.py.
+
+MODELS CODE:
+{models_code[:15000]}
+
+ARCHITECTURE SPECIFICATION:
+{spec_json}
+
+Create test_models.py with:
+1. Test model creation (test_create_<model_name>)
+2. Test model fields and constraints
+3. Test relationships (foreign keys, one-to-many, many-to-many)
+4. Test unique constraints
+5. Test nullable constraints
+6. Test default values
+7. Test model methods if any
+8. Test cascading deletes if applicable
+
+Best practices:
+- Use pytest fixtures from conftest.py
+- Use descriptive test names (test_create_user_with_valid_data)
+- Test both positive and negative cases
+- Use parametrize for testing multiple scenarios
+- Include docstrings explaining what each test does
+- Aim for high code coverage
+
+Return ONLY the Python code for test_models.py, no JSON, no markdown, just the code.
+"""
+            response = self.anthropic_client.messages.create(
+                model=self.model,
+                max_tokens=10000,
+                messages=[{"role": "user", "content": test_models_prompt}]
+            )
+            test_models_code = response.content[0].text.strip()
+
+            # Clean up markdown
+            if "```python" in test_models_code:
+                test_models_code = test_models_code.split("```python")[1].split("```")[0].strip()
+            elif "```" in test_models_code:
+                test_models_code = test_models_code.split("```")[1].split("```")[0].strip()
+
+            generated_tests["test_models"] = test_models_code
+            print(f"[CHUNKED] test_models.py: {len(test_models_code)} characters")
+
+        except Exception as e:
+            print(f"[ERROR] Failed to generate test_models.py: {str(e)[:100]}")
+            generated_tests["test_models"] = "# Error generating test_models.py"
+
+        # Step 3/4: Generate test_schemas.py
+        print("[CHUNKED] Step 3/4: Generating test_schemas.py...")
+        try:
+            test_schemas_prompt = f"""
+Generate comprehensive validation tests for Pydantic schemas in test_schemas.py.
+
+SCHEMAS CODE:
+{schemas_code[:15000]}
+
+ARCHITECTURE SPECIFICATION:
+{spec_json}
+
+Create test_schemas.py with:
+1. Test valid data passes validation
+2. Test invalid data is rejected
+3. Test required fields
+4. Test optional fields
+5. Test field types (string, int, email, etc.)
+6. Test field constraints (max length, min value, etc.)
+7. Test edge cases (empty strings, null values, very long strings)
+8. Test schema serialization/deserialization
+
+Best practices:
+- Use pytest.raises for testing validation errors
+- Use parametrize to test multiple invalid inputs
+- Test both Create and Update schemas
+- Test response schemas
+- Include descriptive test names
+- Test edge cases thoroughly
+
+Return ONLY the Python code for test_schemas.py, no JSON, no markdown, just the code.
+"""
+            response = self.anthropic_client.messages.create(
+                model=self.model,
+                max_tokens=8000,
+                messages=[{"role": "user", "content": test_schemas_prompt}]
+            )
+            test_schemas_code = response.content[0].text.strip()
+
+            # Clean up markdown
+            if "```python" in test_schemas_code:
+                test_schemas_code = test_schemas_code.split("```python")[1].split("```")[0].strip()
+            elif "```" in test_schemas_code:
+                test_schemas_code = test_schemas_code.split("```")[1].split("```")[0].strip()
+
+            generated_tests["test_schemas"] = test_schemas_code
+            print(f"[CHUNKED] test_schemas.py: {len(test_schemas_code)} characters")
+
+        except Exception as e:
+            print(f"[ERROR] Failed to generate test_schemas.py: {str(e)[:100]}")
+            generated_tests["test_schemas"] = "# Error generating test_schemas.py"
+
+        # Step 4/4: Generate test_routes.py
+        print("[CHUNKED] Step 4/4: Generating test_routes.py...")
+        try:
+            test_routes_prompt = f"""
+Generate comprehensive integration tests for FastAPI routes in test_routes.py.
+
+ROUTES CODE:
+{routes_code[:20000]}
+
+ARCHITECTURE SPECIFICATION:
+{spec_json}
+
+Create test_routes.py with:
+1. Test all CRUD operations (Create, Read, Update, Delete)
+2. Test successful responses (200, 201, 204)
+3. Test error responses (400, 404, 422)
+4. Test input validation (valid and invalid data)
+5. Test query parameters (pagination, filtering, search)
+6. Test authentication/authorization if applicable
+7. Test edge cases (non-existent IDs, duplicate entries)
+8. Test database state after operations
+
+Best practices:
+- Use TestClient from conftest.py
+- Test each endpoint with valid and invalid data
+- Verify response status codes
+- Verify response data structure
+- Test database side effects
+- Use descriptive test names
+- Group related tests in classes
+- Aim for 80%+ route coverage
+
+Return ONLY the Python code for test_routes.py, no JSON, no markdown, just the code.
+"""
+            response = self.anthropic_client.messages.create(
+                model=self.model,
+                max_tokens=12000,
+                messages=[{"role": "user", "content": test_routes_prompt}]
+            )
+            test_routes_code = response.content[0].text.strip()
+
+            # Clean up markdown
+            if "```python" in test_routes_code:
+                test_routes_code = test_routes_code.split("```python")[1].split("```")[0].strip()
+            elif "```" in test_routes_code:
+                test_routes_code = test_routes_code.split("```")[1].split("```")[0].strip()
+
+            generated_tests["test_routes"] = test_routes_code
+            print(f"[CHUNKED] test_routes.py: {len(test_routes_code)} characters")
+
+        except Exception as e:
+            print(f"[ERROR] Failed to generate test_routes.py: {str(e)[:100]}")
+            generated_tests["test_routes"] = "# Error generating test_routes.py"
+
+        print(f"[CHUNKED TEST GENERATION] Complete. Generated {len(generated_tests)} test files successfully.")
+        return generated_tests
+
+    def _create_agent(self) -> Agent:
+        """
+        Creates the QA Bee agent with CrewAI.
+
+        Returns:
+            Agent: Configured CrewAI agent
+        """
+        return Agent(
+            role="Senior QA Engineer",
+            goal="Generate comprehensive pytest test suites for FastAPI applications",
+            backstory=(
+                "You are an expert QA engineer specializing in Python testing. "
+                "You create thorough test suites with high code coverage using pytest. "
+                "You write clear, maintainable tests that catch bugs early and ensure "
+                "code quality. You follow testing best practices and write tests that "
+                "serve as documentation for the codebase."
+            ),
+            verbose=True,
+            allow_delegation=False,
+            llm=self.model
+        )
+
+    def _create_task(
+        self,
+        agent: Agent,
+        backend_code: Dict[str, str],
+        architecture_spec: Dict[str, Any],
+        requirements: str
+    ) -> Task:
+        """
+        Creates a CrewAI task for test generation.
+
+        Args:
+            agent: The QA Bee agent
+            backend_code: Generated backend code (models, schemas, routes)
+            architecture_spec: Architecture specification from Architect Bee
+            requirements: Original user requirements
+
+        Returns:
+            Task: Configured CrewAI task
+        """
+        models_summary = f"Models code: {len(backend_code.get('models', ''))} chars"
+        schemas_summary = f"Schemas code: {len(backend_code.get('schemas', ''))} chars"
+        routes_summary = f"Routes code: {len(backend_code.get('routes', ''))} chars"
+
+        task_description = f"""
+Generate comprehensive pytest test suite for a FastAPI application.
+
+BACKEND CODE:
+{models_summary}
+{schemas_summary}
+{routes_summary}
+
+REQUIREMENTS:
+{requirements}
+
+You must generate 4 test files:
+1. conftest.py - pytest fixtures and test configuration
+2. test_models.py - unit tests for SQLAlchemy models
+3. test_schemas.py - validation tests for Pydantic schemas
+4. test_routes.py - integration tests for API endpoints
+
+Requirements:
+- Use pytest best practices (fixtures, parametrize, descriptive names)
+- Aim for 80%+ code coverage
+- Include both positive and negative test cases
+- Test edge cases thoroughly
+- Use descriptive test names that explain what is being tested
+- Include docstrings for complex tests
+- Follow the Arrange-Act-Assert pattern
+
+Return a summary of the tests generated and estimated coverage.
+"""
+
+        return Task(
+            description=task_description,
+            agent=agent,
+            expected_output="Summary of generated test files with estimated coverage"
+        )
+
+    def generate_test_suite(
+        self,
+        backend_code: Dict[str, str],
+        architecture_spec: Dict[str, Any],
+        requirements: str,
+        output_dir: str = None
+    ) -> Dict[str, Any]:
+        """
+        Generates comprehensive pytest test suite for backend code.
+
+        Args:
+            backend_code: Dictionary containing models, schemas, routes code
+            architecture_spec: Architecture specification from Architect Bee
+            requirements: Original user requirements
+            output_dir: Directory where test files should be written
+
+        Returns:
+            Dict containing file paths, metadata, and execution log
+
+        Raises:
+            Exception: If test generation fails
+        """
+        print("="*80)
+        print("QA BEE - GENERATE_TEST_SUITE CALLED")
+        print("="*80)
+
+        try:
+            # Create agent and task
+            agent = self._create_agent()
+            task = self._create_task(agent, backend_code, architecture_spec, requirements)
+
+            # Create crew and execute
+            crew = Crew(
+                agents=[agent],
+                tasks=[task],
+                verbose=True
+            )
+
+            # Execute the crew (for logging purposes)
+            result = crew.kickoff()
+            agent_log = str(result)
+
+            # Generate test files using chunked strategy
+            print("\nUsing CHUNKED TEST GENERATION strategy")
+            generated_tests = self._generate_test_files_chunked(
+                backend_code,
+                architecture_spec,
+                requirements
+            )
+
+            # Log what we got
+            for filename, content in generated_tests.items():
+                content_len = len(content) if content else 0
+                print(f"[DEBUG] {filename}.py: {content_len} characters")
+
+            # Write test files to output directory if provided
+            if output_dir:
+                tests_dir = Path(output_dir) / "backend" / "tests"
+                tests_dir.mkdir(parents=True, exist_ok=True)
+
+                # Create __init__.py to make it a package
+                init_file = tests_dir / "__init__.py"
+                init_file.write_text("# Test suite for generated backend code\n", encoding='utf-8')
+
+                file_paths = {}
+                file_stats = {}
+
+                for filename, content in generated_tests.items():
+                    if content and not content.startswith("# Error"):  # Only write valid tests
+                        file_path = tests_dir / f"{filename}.py"
+                        file_path.write_text(content, encoding='utf-8')
+                        file_paths[filename] = str(file_path)
+                        file_stats[filename] = {
+                            "lines": len(content.split('\n')),
+                            "chars": len(content),
+                            "path": str(file_path)
+                        }
+
+                return {
+                    "file_paths": file_paths,
+                    "file_stats": file_stats,
+                    "output_dir": str(tests_dir),
+                    "agent_log": agent_log,
+                    "files_written": len(file_paths),
+                    "estimated_coverage": self._estimate_coverage(generated_tests)
+                }
+            else:
+                # Legacy behavior: return test content
+                return {
+                    "tests": generated_tests,
+                    "agent_log": agent_log,
+                    "estimated_coverage": self._estimate_coverage(generated_tests)
+                }
+
+        except Exception as e:
+            raise Exception(f"Test generation failed: {str(e)}")
+
+    def _estimate_coverage(self, generated_tests: Dict[str, str]) -> str:
+        """
+        Estimate test coverage based on generated tests.
+
+        Args:
+            generated_tests: Dictionary of generated test files
+
+        Returns:
+            Estimated coverage percentage as string
+        """
+        # Simple heuristic: count test functions
+        total_tests = 0
+        for content in generated_tests.values():
+            if content and not content.startswith("# Error"):
+                total_tests += content.count("def test_")
+
+        if total_tests == 0:
+            return "0%"
+        elif total_tests < 5:
+            return "40-50%"
+        elif total_tests < 10:
+            return "60-70%"
+        elif total_tests < 20:
+            return "75-85%"
+        else:
+            return "85-95%"
+
+    def generate_test_suite_with_retry(
+        self,
+        backend_code: Dict[str, str],
+        architecture_spec: Dict[str, Any],
+        requirements: str,
+        output_dir: str = None,
+        max_attempts: int = 3
+    ) -> Dict[str, Any]:
+        """
+        Generates test suite with intelligent retry logic.
+
+        Args:
+            backend_code: Dictionary containing models, schemas, routes code
+            architecture_spec: Architecture specification from Architect Bee
+            requirements: Original user requirements
+            output_dir: Directory where test files should be written
+            max_attempts: Maximum number of retry attempts
+
+        Returns:
+            Dict containing file paths, metadata, execution log, and retry information
+        """
+        from app.core.complexity_analyzer import complexity_analyzer
+
+        attempts = []
+        last_error = None
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                print(f"\n{'='*60}")
+                print(f"QA Bee - Attempt {attempt}/{max_attempts}")
+                print(f"{'='*60}")
+
+                # Determine scope for this attempt
+                if attempt == 1:
+                    # First attempt: full test suite
+                    current_requirements = requirements
+                    attempt_type = "Full test suite (all 4 files)"
+                elif attempt == 2:
+                    # Second attempt: skip edge case tests
+                    current_requirements = requirements + "\n\nNote: Focus on core functionality, skip advanced edge cases."
+                    attempt_type = "Simplified (core tests only)"
+                    print(f"RETRY STRATEGY: {attempt_type}")
+                else:
+                    # Third attempt: minimal tests
+                    current_requirements = requirements + "\n\nNote: Generate minimal smoke tests only."
+                    attempt_type = "Minimal (smoke tests)"
+                    print(f"RETRY STRATEGY: {attempt_type}")
+
+                # Attempt generation
+                result = self.generate_test_suite(
+                    backend_code,
+                    architecture_spec,
+                    current_requirements,
+                    output_dir
+                )
+
+                # Success! Add attempt info and return
+                result["retry_info"] = {
+                    "attempts": attempt,
+                    "final_attempt_type": attempt_type,
+                    "attempt_history": attempts + [{
+                        "attempt": attempt,
+                        "type": attempt_type,
+                        "status": "success"
+                    }]
+                }
+
+                print(f"\n[SUCCESS] QA Bee succeeded on attempt {attempt}")
+                return result
+
+            except Exception as e:
+                last_error = str(e)
+                attempts.append({
+                    "attempt": attempt,
+                    "type": attempt_type if 'attempt_type' in locals() else "Full test suite",
+                    "status": "failed",
+                    "error": str(e)[:200]
+                })
+
+                print(f"\n[FAILED] Attempt {attempt} failed: {str(e)[:100]}")
+
+                if attempt < max_attempts:
+                    print(f"[RETRY] Retrying with simplified scope...")
+                    time.sleep(2)
+                else:
+                    print(f"\n[FAILED] All {max_attempts} attempts failed")
+
+        # All attempts failed - return graceful degradation
+        print("[WARNING] QA Bee failed, but backend/frontend still succeeded")
+        return {
+            "file_paths": {},
+            "file_stats": {},
+            "output_dir": output_dir if output_dir else "N/A",
+            "agent_log": f"All {max_attempts} attempts failed. Last error: {last_error}",
+            "files_written": 0,
+            "estimated_coverage": "0%",
+            "retry_info": {
+                "attempts": max_attempts,
+                "final_attempt_type": "all_failed",
+                "attempt_history": attempts,
+                "last_error": last_error
+            },
+            "status": "failed"
+        }
+
+
+# Global instance
+qa_bee = QABeeAgent()
