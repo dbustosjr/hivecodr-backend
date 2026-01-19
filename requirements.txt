@@ -8,7 +8,7 @@ crewai>=1.8.0
 crewai-tools>=0.17.0
 
 # Anthropic Claude API
-anthropic==0.39.0
+anthropic>=0.40.0
 
 # Supabase client
 supabase>=2.12.0
