@@ -17,7 +17,8 @@ class FrontendBeeAgent:
 
     def __init__(self):
         # Create HTTP client with explicit HTTP/2 support for Railway
-        http_client = httpx.Client(
+        # Store as instance variable to prevent garbage collection
+        self.http_client = httpx.Client(
             http2=True,
             timeout=120.0,
             limits=httpx.Limits(
@@ -37,7 +38,7 @@ class FrontendBeeAgent:
 
         # Workaround: Manually assign HTTP/2 client to internal Anthropic client
         # See: https://github.com/langchain-ai/langchain/issues/30146
-        self.model._client._client = http_client
+        self.model._client._client = self.http_client
 
     def _create_agent(self) -> Agent:
         """Create the Frontend Bee agent with specialized frontend development skills."""
