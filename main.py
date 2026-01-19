@@ -92,16 +92,17 @@ async def shutdown_event():
     print("Shutting down HiveCodr Backend")
 
 
+# This should ONLY be used for local development
+# In production (Railway), Dockerfile CMD is used
 if __name__ == "__main__":
     import uvicorn
     import os
 
-    # Use Railway's PORT environment variable if available, otherwise default to 8000
     port = int(os.getenv("PORT", 8000))
 
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=port,
-        reload=settings.ENVIRONMENT == "development"
+        reload=True  # Auto-reload for local development
     )
