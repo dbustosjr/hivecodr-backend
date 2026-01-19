@@ -1,6 +1,5 @@
 """Supabase JWT authentication middleware and dependencies."""
 
-import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from supabase import create_client, Client
@@ -41,36 +40,19 @@ async def get_current_user(
     token = credentials.credentials
 
     try:
-        # Decode and verify JWT token with Supabase JWT secret
-        payload = jwt.decode(
-            token,
-            settings.SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            audience="authenticated"
-        )
+        # Use Supabase's built-in token verification
+        # This handles ES256/HS256 algorithms automatically
+        response = supabase.auth.get_user(token)
 
-        # Extract user ID from token payload
-        user_id = payload.get("sub")
-        email = payload.get("email")
-
-        if not user_id:
+        if not response or not response.user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication token: missing user ID"
+                detail="Invalid authentication token"
             )
 
-        return CurrentUser(user_id=user_id, email=email)
+        user = response.user
+        return CurrentUser(user_id=user.id, email=user.email)
 
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication token has expired"
-        )
-    except jwt.InvalidTokenError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid authentication token: {str(e)}"
-        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
