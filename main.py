@@ -116,6 +116,60 @@ async def debug_anthropic():
     return result
 
 
+@app.get(
+    "/debug/architect-bee",
+    tags=["Debug"],
+    summary="Test Architect Bee initialization",
+    description="Debug endpoint to test Architect Bee ChatAnthropic with HTTP/2"
+)
+async def debug_architect_bee():
+    """Debug endpoint to test Architect Bee initialization."""
+    import os
+    import httpx
+    from langchain_anthropic import ChatAnthropic
+
+    result = {
+        "api_key_set": bool(os.getenv("ANTHROPIC_API_KEY")),
+        "model": settings.CLAUDE_MODEL,
+        "http2_enabled": True,
+        "test_status": "pending"
+    }
+
+    try:
+        # Create HTTP client with HTTP/2 support (same as Architect Bee)
+        http_client = httpx.Client(
+            http2=True,
+            timeout=120.0,
+            limits=httpx.Limits(
+                max_keepalive_connections=5,
+                max_connections=10
+            )
+        )
+
+        # Initialize ChatAnthropic with HTTP/2 (same as Architect Bee)
+        model = ChatAnthropic(
+            model=settings.CLAUDE_MODEL,
+            temperature=0.7,
+            max_tokens=100,
+            timeout=120.0,
+            max_retries=3,
+            http_client=http_client
+        )
+        result["initialization"] = "success"
+
+        # Test API call
+        response = model.invoke("Say hello in one sentence")
+        result["test_status"] = "success"
+        result["response"] = str(response.content)
+    except Exception as e:
+        result["test_status"] = "failed"
+        result["error"] = f"{type(e).__name__}: {str(e)}"
+        import traceback
+        result["traceback"] = traceback.format_exc()
+
+    return result
+
+
 # Include API routers
 app.include_router(
     generate_router,
