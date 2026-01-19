@@ -9,6 +9,7 @@ from pathlib import Path
 import json
 import os
 import time
+import httpx
 
 
 class DeveloperBeeAgent:
@@ -21,9 +22,20 @@ class DeveloperBeeAgent:
 
     def __init__(self):
         """Initialize the Developer Bee agent with Claude API."""
+        # Create HTTP client with explicit HTTP/2 support for Railway
+        http_client = httpx.Client(
+            http2=True,
+            timeout=120.0,
+            limits=httpx.Limits(
+                max_keepalive_connections=5,
+                max_connections=10
+            )
+        )
+
         # Increased timeout for Railway's slower network
         self.anthropic_client = Anthropic(
             api_key=settings.ANTHROPIC_API_KEY,
+            http_client=http_client,
             timeout=120.0,  # 2 minutes for Railway network latency
             max_retries=3
         )

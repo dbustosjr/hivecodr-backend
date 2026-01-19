@@ -69,26 +69,46 @@ async def health_check():
     "/debug/anthropic",
     tags=["Debug"],
     summary="Test Anthropic API connection",
-    description="Debug endpoint to test ChatAnthropic initialization and API calls"
+    description="Debug endpoint to test ChatAnthropic initialization and API calls with HTTP/2"
 )
 async def debug_anthropic():
-    """Debug endpoint to test Anthropic API."""
+    """Debug endpoint to test Anthropic API with HTTP/2."""
     import os
-    from langchain_anthropic import ChatAnthropic
+    import httpx
+    from anthropic import Anthropic
 
     result = {
         "api_key_set": bool(os.getenv("ANTHROPIC_API_KEY")),
         "model": settings.CLAUDE_MODEL,
+        "http2_enabled": True,
         "test_status": "pending"
     }
 
     try:
-        llm = ChatAnthropic(model=settings.CLAUDE_MODEL, max_tokens=50)
+        # Create HTTP client with HTTP/2 support
+        http_client = httpx.Client(
+            http2=True,
+            timeout=120.0,
+            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+        )
+
+        # Initialize Anthropic client with HTTP/2
+        client = Anthropic(
+            api_key=os.getenv("ANTHROPIC_API_KEY"),
+            http_client=http_client,
+            timeout=120.0,
+            max_retries=3
+        )
         result["initialization"] = "success"
 
-        response = llm.invoke("Say hello")
+        # Test API call
+        response = client.messages.create(
+            model=settings.CLAUDE_MODEL,
+            max_tokens=50,
+            messages=[{"role": "user", "content": "Say hello"}]
+        )
         result["test_status"] = "success"
-        result["response"] = response.content
+        result["response"] = response.content[0].text
     except Exception as e:
         result["test_status"] = "failed"
         result["error"] = f"{type(e).__name__}: {str(e)}"

@@ -33,8 +33,9 @@ slowapi==0.1.9
 # Environment variables
 python-dotenv>=1.1.1
 
-# HTTP client
-httpx==0.27.2
+# HTTP client with HTTP/2 support for Anthropic API
+httpx[http2]>=0.27.2
+h2>=4.1.0
 
 # Utilities
 python-dateutil==2.9.0
