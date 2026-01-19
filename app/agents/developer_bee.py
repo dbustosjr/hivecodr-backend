@@ -21,7 +21,12 @@ class DeveloperBeeAgent:
 
     def __init__(self):
         """Initialize the Developer Bee agent with Claude API."""
-        self.anthropic_client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        # Increased timeout for Railway's slower network
+        self.anthropic_client = Anthropic(
+            api_key=settings.ANTHROPIC_API_KEY,
+            timeout=120.0,  # 2 minutes for Railway network latency
+            max_retries=3
+        )
         self.model = settings.CLAUDE_MODEL
 
     def _generate_files_chunked(self, architecture_spec: Dict[str, Any], requirements: str) -> Dict[str, str]:

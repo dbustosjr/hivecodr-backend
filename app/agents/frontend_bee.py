@@ -4,6 +4,7 @@ from crewai import Agent, Task, Crew
 from typing import Dict, Any
 from pathlib import Path
 from app.core.complexity_analyzer import complexity_analyzer
+from langchain_anthropic import ChatAnthropic
 import json
 import os
 import time
@@ -14,7 +15,14 @@ class FrontendBeeAgent:
     """Frontend Bee agent that generates Next.js 14 applications with TypeScript and Tailwind CSS."""
 
     def __init__(self):
-        self.model = settings.CLAUDE_MODEL
+        # Increased timeout for Railway's slower network
+        self.model = ChatAnthropic(
+            model=settings.CLAUDE_MODEL,
+            temperature=0.7,
+            max_tokens=4096,
+            timeout=120.0,  # 2 minutes for Railway network latency
+            max_retries=3
+        )
 
     def _create_agent(self) -> Agent:
         """Create the Frontend Bee agent with specialized frontend development skills."""

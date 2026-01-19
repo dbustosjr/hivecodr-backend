@@ -23,7 +23,12 @@ class QABeeAgent:
     def __init__(self):
         """Initialize QA Bee with CrewAI and Claude API configurations."""
         self.model = "claude-sonnet-4-20250514"
-        self.anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        # Increased timeout for Railway's slower network
+        self.anthropic_client = Anthropic(
+            api_key=os.getenv("ANTHROPIC_API_KEY"),
+            timeout=120.0,  # 2 minutes for Railway network latency
+            max_retries=3
+        )
 
     def _generate_test_files_chunked(
         self,

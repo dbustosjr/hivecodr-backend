@@ -20,10 +20,13 @@ class DevOpsBeeAgent:
     def __init__(self):
         """Initialize the DevOps Bee agent."""
         # Let ChatAnthropic auto-detect ANTHROPIC_API_KEY from environment
+        # Increased timeout for Railway's slower network
         self.model = ChatAnthropic(
             model=settings.CLAUDE_MODEL,
             temperature=0.7,
-            max_tokens=4096
+            max_tokens=4096,
+            timeout=120.0,  # 2 minutes for Railway network latency
+            max_retries=3
         )
 
     def _create_agent(self) -> Agent:
