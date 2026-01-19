@@ -9,8 +9,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Railway will inject PORT at runtime
-ENV PORT=8000
+# Make start script executable
+RUN chmod +x start.sh
 
-# Use exec form (not shell form) and let uvicorn read PORT from environment
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port $PORT"]
+EXPOSE 8000
+
+# Use the start script
+CMD ["./start.sh"]
