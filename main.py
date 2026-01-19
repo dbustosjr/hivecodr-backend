@@ -19,8 +19,8 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
     description="HiveCodr Backend - AI-powered code generation with Developer Bee agents",
-    docs_url="/docs" if settings.ENVIRONMENT == "development" else None,
-    redoc_url="/redoc" if settings.ENVIRONMENT == "development" else None
+    docs_url="/docs",  # Always enable docs for now
+    redoc_url="/redoc"  # Always enable redoc for now
 )
 
 # Add rate limiter to app state
@@ -31,11 +31,14 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"] if settings.ENVIRONMENT == "development" else [
+        "https://hivecodr-backend-production.up.railway.app",
         "https://hivecodr.com",
-        "https://app.hivecodr.com"
+        "https://app.hivecodr.com",
+        "https://*.vercel.app",  # Allow Vercel preview deployments
+        "http://localhost:3000",  # Local frontend development
     ],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
