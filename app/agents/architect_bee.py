@@ -36,9 +36,12 @@ class ArchitectBeeAgent:
             temperature=0.7,
             max_tokens=4096,
             timeout=120.0,  # 2 minutes for Railway network latency
-            max_retries=3,
-            http_client=http_client  # Use HTTP/2 client
+            max_retries=3
         )
+
+        # Workaround: Manually assign HTTP/2 client to internal Anthropic client
+        # See: https://github.com/langchain-ai/langchain/issues/30146
+        self.model._client._client = http_client
 
     def _create_agent(self) -> Agent:
         """

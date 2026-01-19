@@ -152,9 +152,12 @@ async def debug_architect_bee():
             temperature=0.7,
             max_tokens=100,
             timeout=120.0,
-            max_retries=3,
-            http_client=http_client
+            max_retries=3
         )
+
+        # Workaround: Manually assign HTTP/2 client to internal Anthropic client
+        # See: https://github.com/langchain-ai/langchain/issues/30146
+        model._client._client = http_client
         result["initialization"] = "success"
 
         # Test API call
