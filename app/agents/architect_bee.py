@@ -3,7 +3,9 @@
 from crewai import Agent, Task
 from typing import Dict, Any
 from app.core.config import settings
+from langchain_anthropic import ChatAnthropic
 import json
+import os
 
 
 class ArchitectBeeAgent:
@@ -16,7 +18,12 @@ class ArchitectBeeAgent:
 
     def __init__(self):
         """Initialize the Architect Bee agent."""
-        self.model = settings.CLAUDE_MODEL
+        self.model = ChatAnthropic(
+            model=settings.CLAUDE_MODEL,
+            anthropic_api_key=settings.ANTHROPIC_API_KEY or os.getenv("ANTHROPIC_API_KEY"),
+            temperature=0.7,
+            max_tokens=4096
+        )
 
     def _create_agent(self) -> Agent:
         """
