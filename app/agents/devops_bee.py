@@ -19,9 +19,9 @@ class DevOpsBeeAgent:
 
     def __init__(self):
         """Initialize the DevOps Bee agent."""
+        # Let ChatAnthropic auto-detect ANTHROPIC_API_KEY from environment
         self.model = ChatAnthropic(
             model=settings.CLAUDE_MODEL,
-            anthropic_api_key=settings.ANTHROPIC_API_KEY or os.getenv("ANTHROPIC_API_KEY"),
             temperature=0.7,
             max_tokens=4096
         )
