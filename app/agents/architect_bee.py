@@ -364,7 +364,18 @@ Return ONLY valid JSON, no markdown code blocks, no additional text. Ensure prop
             }
 
         except Exception as e:
-            raise Exception(f"Architecture analysis failed: {str(e)}")
+            import traceback
+            error_details = {
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "traceback": traceback.format_exc()
+            }
+            print(f"[ERROR] Architecture analysis failed:")
+            print(f"  Type: {error_details['error_type']}")
+            print(f"  Message: {error_details['error_message']}")
+            print(f"  Traceback: {error_details['traceback'][:1000]}")
+            # Include error type in exception message for debugging
+            raise Exception(f"Architecture analysis failed: [{error_details['error_type']}] {str(e)}")
 
 
 # Global instance
