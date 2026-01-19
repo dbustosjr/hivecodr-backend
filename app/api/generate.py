@@ -10,10 +10,10 @@ from app.models.schemas import GenerateRequest, GenerateResponse
 from app.core.auth import get_current_user, get_supabase_client, CurrentUser
 from app.core.rate_limiter import check_rate_limit, increment_usage
 from app.core.complexity_analyzer import complexity_analyzer
-from app.agents.architect_bee import architect_bee
-from app.agents.developer_bee import developer_bee
-from app.agents.frontend_bee import frontend_bee
-from app.agents.qa_bee import qa_bee
+from app.agents.architect_bee import ArchitectBeeAgent
+from app.agents.developer_bee import DeveloperBeeAgent
+from app.agents.frontend_bee import FrontendBeeAgent
+from app.agents.qa_bee import QABeeAgent
 from app.agents.devops_bee import DevOpsBeeAgent
 from app.services.railway_deploy import RailwayDeployService, RailwayDeploymentError
 from app.services.vercel_deploy import VercelDeployService, VercelDeploymentError
@@ -123,6 +123,7 @@ async def generate_code(
         print("PHASE 1: ARCHITECTURE DESIGN")
         print(f"{'='*80}\n")
 
+        architect_bee = ArchitectBeeAgent()
         architecture_result = architect_bee.analyze_requirements(request.requirements)
         architecture_spec = architecture_result["specification"]
         architect_log = architecture_result["raw_output"]
@@ -140,6 +141,7 @@ async def generate_code(
         print("PHASE 2: BACKEND CODE GENERATION")
         print(f"{'='*80}\n")
 
+        developer_bee = DeveloperBeeAgent()
         backend_result = developer_bee.generate_crud_code_with_retry(
             requirements=request.requirements,
             architecture_spec=architecture_spec,
@@ -193,6 +195,7 @@ async def generate_code(
                 "main": ""
             }
 
+        frontend_bee = FrontendBeeAgent()
         frontend_result = frontend_bee.generate_frontend_code_with_retry(
             backend_code=backend_code,
             requirements=request.requirements,
@@ -234,6 +237,7 @@ async def generate_code(
             elif 'code' in frontend_result:
                 frontend_code = frontend_result['code']
 
+            qa_bee = QABeeAgent()
             test_result = qa_bee.generate_test_suite_with_retry(
                 backend_code=backend_code,
                 architecture_spec=architecture_spec,
