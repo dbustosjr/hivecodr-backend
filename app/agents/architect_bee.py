@@ -8,6 +8,19 @@ import json
 import os
 import httpx
 
+# Monkey-patch httpx.Client to always use HTTP/2 for Railway compatibility
+_original_httpx_client_init = httpx.Client.__init__
+
+def _patched_httpx_client_init(self, **kwargs):
+    """Patched httpx.Client.__init__ that forces HTTP/2."""
+    if 'http2' not in kwargs:
+        kwargs['http2'] = True
+    if 'timeout' not in kwargs:
+        kwargs['timeout'] = 120.0
+    _original_httpx_client_init(self, **kwargs)
+
+httpx.Client.__init__ = _patched_httpx_client_init
+
 
 class ArchitectBeeAgent:
     """
@@ -19,19 +32,8 @@ class ArchitectBeeAgent:
 
     def __init__(self):
         """Initialize the Architect Bee agent."""
-        # Create HTTP client with explicit HTTP/2 support for Railway
-        # Store as instance variable to prevent garbage collection
-        self.http_client = httpx.Client(
-            http2=True,
-            timeout=120.0,
-            limits=httpx.Limits(
-                max_keepalive_connections=5,
-                max_connections=10
-            )
-        )
-
+        # HTTP/2 is enabled globally via monkey-patch above
         # Let ChatAnthropic auto-detect ANTHROPIC_API_KEY from environment
-        # Increased timeout for Railway's slower network
         self.model = ChatAnthropic(
             model=settings.CLAUDE_MODEL,
             temperature=0.7,
@@ -39,10 +41,6 @@ class ArchitectBeeAgent:
             timeout=120.0,  # 2 minutes for Railway network latency
             max_retries=3
         )
-
-        # Workaround: Manually assign HTTP/2 client to internal Anthropic client
-        # See: https://github.com/langchain-ai/langchain/issues/30146
-        self.model._client._client = self.http_client
 
     def _create_agent(self) -> Agent:
         """
