@@ -8,6 +8,7 @@ from langchain_anthropic import ChatAnthropic
 import json
 import os
 import time
+import httpx
 from app.core.config import settings
 
 
@@ -15,13 +16,24 @@ class FrontendBeeAgent:
     """Frontend Bee agent that generates Next.js 14 applications with TypeScript and Tailwind CSS."""
 
     def __init__(self):
+        # Create HTTP client with explicit HTTP/2 support for Railway
+        http_client = httpx.Client(
+            http2=True,
+            timeout=120.0,
+            limits=httpx.Limits(
+                max_keepalive_connections=5,
+                max_connections=10
+            )
+        )
+
         # Increased timeout for Railway's slower network
         self.model = ChatAnthropic(
             model=settings.CLAUDE_MODEL,
             temperature=0.7,
             max_tokens=4096,
             timeout=120.0,  # 2 minutes for Railway network latency
-            max_retries=3
+            max_retries=3,
+            http_client=http_client  # Use HTTP/2 client
         )
 
     def _create_agent(self) -> Agent:
