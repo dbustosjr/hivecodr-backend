@@ -1,5 +1,15 @@
 """HiveCodr Backend - FastAPI application with Supabase auth and CrewAI agents."""
 
+# CRITICAL: Monkey-patch httpx BEFORE any imports to force HTTP/2 for Railway
+import httpx
+_original_httpx_client_init = httpx.Client.__init__
+def _patched_httpx_client_init(self, **kwargs):
+    """Force HTTP/2 for all httpx clients (Railway requirement)."""
+    kwargs.setdefault('http2', True)
+    kwargs.setdefault('timeout', 120.0)
+    _original_httpx_client_init(self, **kwargs)
+httpx.Client.__init__ = _patched_httpx_client_init
+
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
