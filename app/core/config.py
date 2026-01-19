@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "HiveCodr Backend"
     VERSION: str = "1.0.0"
 
+    # Deployment (optional)
+    RAILWAY_API_TOKEN: Optional[str] = None
+    VERCEL_API_TOKEN: Optional[str] = None
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

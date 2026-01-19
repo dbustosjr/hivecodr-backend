@@ -14,6 +14,11 @@ from app.agents.architect_bee import architect_bee
 from app.agents.developer_bee import developer_bee
 from app.agents.frontend_bee import frontend_bee
 from app.agents.qa_bee import qa_bee
+from app.agents.devops_bee import DevOpsBeeAgent
+from app.services.railway_deploy import RailwayDeployService, RailwayDeploymentError
+from app.services.vercel_deploy import VercelDeployService, VercelDeploymentError
+from app.core.config import settings
+import time
 
 
 router = APIRouter()
@@ -52,7 +57,7 @@ def create_output_directory(requirements: str) -> str:
     response_model=GenerateResponse,
     status_code=status.HTTP_200_OK,
     summary="Generate full-stack application from requirements",
-    description="Generates complete FastAPI backend + Next.js 14 frontend based on plain English requirements using a three-agent workflow"
+    description="Generates complete FastAPI backend + Next.js 14 frontend based on plain English requirements using a five-agent workflow (Architect, Developer, Frontend, QA, and DevOps Bees). Optionally deploys to Railway (backend) and Vercel (frontend)."
 )
 async def generate_code(
     request: GenerateRequest,
@@ -62,18 +67,23 @@ async def generate_code(
     """
     Generate full-stack application from plain English requirements.
 
-    Uses a three-agent sequential workflow:
-    1. Architect Bee - Analyzes requirements and creates technical specification
-    2. Developer Bee - Generates FastAPI backend code based on the architecture specification
-    3. Frontend Bee - Generates Next.js 14 frontend code based on the backend
+    Uses a five-agent sequential workflow:
+    Phase 0: Complexity Analysis
+    Phase 1: Architect Bee - Analyzes requirements and creates technical specification
+    Phase 2: Developer Bee - Generates FastAPI backend code based on the architecture specification
+    Phase 3: Frontend Bee - Generates Next.js 14 frontend code based on the backend
+    Phase 4: QA Bee - Generates comprehensive test suite for backend and frontend
+    Phase 5: DevOps Bee - Generates deployment configurations (Dockerfile, railway.json, vercel.json, etc.)
+    Phase 6 (Optional): Automated deployment to Railway (backend) and Vercel (frontend) if deploy=true
 
     Args:
-        request: Generation request with requirements
+        request: Generation request with requirements, optional deploy and app_name
         current_user: Authenticated user from JWT token
         supabase: Supabase client for database operations
 
     Returns:
-        GenerateResponse: Generated backend and frontend code with agent logs
+        GenerateResponse: Generated backend, frontend, tests, and deployment configs with agent logs.
+                         If deploy=true, includes live URLs for deployed applications.
 
     Raises:
         HTTPException: If rate limit exceeded or generation fails
@@ -281,12 +291,151 @@ async def generate_code(
             test_counts = test_result["test_counts"]
             coverage_estimates = test_result["coverage_estimates"]
 
+        # PHASE 5: DevOps Bee - Generate deployment configurations
+        print(f"\n{'='*80}")
+        print("PHASE 5: DEPLOYMENT CONFIGURATION GENERATION")
+        print(f"{'='*80}\n")
+
+        devops_bee = DevOpsBeeAgent()
+        deployment_config = {}
+        deployment_files = 0
+        devops_log = ""
+        deployment_status = "success"
+
+        try:
+            # Generate deployment configurations
+            deployment_config = devops_bee.generate_deployment_configs(
+                app_name=request.app_name or "generated-app",
+                architecture=architecture_spec,
+                backend_files=backend_code,
+                frontend_files={}  # We'll read from disk if needed
+            )
+
+            # Write deployment files to output directory
+            deployment_dir = Path(output_dir) / "deployment"
+            deployment_dir.mkdir(parents=True, exist_ok=True)
+
+            deployment_files_data = deployment_config.get("deployment_files", {})
+            for filename, content in deployment_files_data.items():
+                file_path = deployment_dir / filename
+                file_path.write_text(content, encoding='utf-8')
+                deployment_files += 1
+
+            devops_log = f"Generated {deployment_files} deployment configuration files"
+
+            print(f"[OK] Deployment configurations generated:")
+            print(f"   - Files written: {deployment_files}")
+            print(f"   - Files: {', '.join(deployment_files_data.keys())}")
+
+        except Exception as e:
+            print(f"[WARNING] Deployment config generation failed: {e}")
+            deployment_status = "failed"
+            devops_log = f"Deployment config generation failed: {str(e)}"
+
+        # PHASE 6 (Optional): Deploy to Railway and Vercel
+        deployed = False
+        backend_url = None
+        frontend_url = None
+        deployment_time_str = None
+        deployment_result = {}
+
+        if request.deploy and request.app_name:
+            print(f"\n{'='*80}")
+            print("PHASE 6: AUTOMATED DEPLOYMENT")
+            print(f"{'='*80}\n")
+
+            deployment_start = time.time()
+
+            # Prepare environment variables for backend
+            backend_env_vars = {}
+            if deployment_config.get("environment_variables", {}).get("backend"):
+                for var_name, var_info in deployment_config["environment_variables"]["backend"].items():
+                    if var_info.get("required"):
+                        # Get from settings if available
+                        if hasattr(settings, var_name):
+                            backend_env_vars[var_name] = getattr(settings, var_name)
+
+            # Deploy backend to Railway
+            try:
+                if settings.RAILWAY_API_TOKEN:
+                    print("[DEPLOYING] Backend to Railway...")
+                    railway_service = RailwayDeployService(settings.RAILWAY_API_TOKEN)
+
+                    backend_deployment = railway_service.deploy_backend(
+                        app_name=request.app_name,
+                        backend_files=backend_code,
+                        deployment_files=deployment_files_data,
+                        environment_vars=backend_env_vars
+                    )
+
+                    if backend_deployment.get("success"):
+                        # Note: Railway requires GitHub integration
+                        deployment_result["backend"] = backend_deployment
+                        print(f"[OK] Railway project created: {backend_deployment.get('project_id')}")
+                        print(f"[INFO] Connect your GitHub repository to complete deployment")
+                    else:
+                        print(f"[WARNING] Backend deployment setup incomplete")
+
+                else:
+                    print("[WARNING] RAILWAY_API_TOKEN not configured - skipping backend deployment")
+
+            except RailwayDeploymentError as e:
+                print(f"[ERROR] Railway deployment failed: {e}")
+                deployment_result["backend_error"] = str(e)
+
+            # Deploy frontend to Vercel
+            try:
+                if settings.VERCEL_API_TOKEN:
+                    print("[DEPLOYING] Frontend to Vercel...")
+                    vercel_service = VercelDeployService(settings.VERCEL_API_TOKEN)
+
+                    # Prepare frontend files
+                    frontend_files_dict = {}
+                    if 'file_paths' in frontend_result and frontend_result['file_paths']:
+                        for filename, filepath in frontend_result['file_paths'].items():
+                            try:
+                                frontend_files_dict[filename] = Path(filepath).read_text(encoding='utf-8')
+                            except Exception:
+                                pass
+
+                    # Prepare frontend environment variables
+                    frontend_env_vars = {
+                        "NEXT_PUBLIC_API_URL": backend_url or f"https://{request.app_name}.railway.app"
+                    }
+
+                    frontend_deployment = vercel_service.deploy_frontend(
+                        app_name=request.app_name,
+                        frontend_files=frontend_files_dict,
+                        deployment_files=deployment_files_data,
+                        environment_vars=frontend_env_vars
+                    )
+
+                    if frontend_deployment.get("success"):
+                        frontend_url = frontend_deployment.get("url")
+                        deployment_result["frontend"] = frontend_deployment
+                        deployed = True
+                        print(f"[OK] Frontend deployed to: {frontend_url}")
+                    else:
+                        print(f"[WARNING] Frontend deployment failed")
+
+                else:
+                    print("[WARNING] VERCEL_API_TOKEN not configured - skipping frontend deployment")
+
+            except VercelDeploymentError as e:
+                print(f"[ERROR] Vercel deployment failed: {e}")
+                deployment_result["frontend_error"] = str(e)
+
+            deployment_elapsed = time.time() - deployment_start
+            deployment_time_str = f"{int(deployment_elapsed // 60)}m {int(deployment_elapsed % 60)}s"
+
+            print(f"\n[OK] Deployment phase completed in {deployment_time_str}")
+
         # Create generation summary
         print(f"\n{'='*80}")
         print("GENERATION SUMMARY")
         print(f"{'='*80}\n")
 
-        total_files = backend_files + frontend_files + test_files
+        total_files = backend_files + frontend_files + test_files + deployment_files
         success_rate = "Complete" if backend_status == "success" and frontend_status == "success" else "Partial"
 
         print(f"Overall Status: {success_rate}")
@@ -294,6 +443,7 @@ async def generate_code(
         print(f"  - Backend: {backend_files} files ({backend_status})")
         print(f"  - Frontend: {frontend_files} files ({frontend_status})")
         print(f"  - Tests: {test_files} files ({test_status})")
+        print(f"  - Deployment: {deployment_files} files ({deployment_status})")
         print(f"    • Backend Tests: {test_counts.get('backend', 0)} files - Coverage: {coverage_estimates.get('backend', 'N/A')}")
         print(f"    • Frontend Tests: {test_counts.get('frontend', 0)} files - Coverage: {coverage_estimates.get('frontend', 'N/A')}")
         print(f"    • E2E Tests: {test_counts.get('e2e', 0)} files - {coverage_estimates.get('e2e', 'N/A')}")
@@ -301,6 +451,20 @@ async def generate_code(
         print(f"    • Contract Tests: {test_counts.get('contract', 0)} files - {coverage_estimates.get('contracts', 'N/A')}")
         print(f"Complexity Level: {complexity_analysis['complexity_level']}")
         print(f"Output Directory: {output_dir}")
+
+        if deployed:
+            print(f"\nDEPLOYMENT STATUS:")
+            print(f"  - Deployed: Yes")
+            if backend_url:
+                print(f"  - Backend URL: {backend_url}")
+            if frontend_url:
+                print(f"  - Frontend URL: {frontend_url}")
+            if deployment_time_str:
+                print(f"  - Deployment Time: {deployment_time_str}")
+        elif request.deploy:
+            print(f"\nDEPLOYMENT STATUS: Attempted but incomplete (see logs above)")
+        elif deployment_files > 0:
+            print(f"\nDEPLOYMENT CONFIGS: Ready for manual deployment")
 
         # Combine logs from all phases
         combined_log = f"""
@@ -344,13 +508,27 @@ Final Strategy: {test_result.get('retry_info', {}).get('final_attempt_type', 'N/
 
 {qa_log[:2000]}  [Truncated for storage]
 
+=== PHASE 5: DEPLOYMENT CONFIGURATION ===
+Status: {deployment_status}
+Deployment Files Written: {deployment_files}
+
+{devops_log[:2000]}  [Truncated for storage]
+
+=== PHASE 6: AUTOMATED DEPLOYMENT ===
+Deployed: {deployed}
+Backend URL: {backend_url or 'N/A'}
+Frontend URL: {frontend_url or 'N/A'}
+Deployment Time: {deployment_time_str or 'N/A'}
+
 === SUMMARY ===
 Overall Status: {success_rate}
 Total Files: {total_files}
   - Backend: {backend_files}
   - Frontend: {frontend_files}
   - Tests: {test_files} (Coverage: {estimated_coverage})
+  - Deployment: {deployment_files}
 Output Directory: {output_dir}
+Deployed: {deployed}
 """
 
         # Store generation in database with file paths instead of full code
@@ -387,6 +565,15 @@ Output Directory: {output_dir}
                     "status": test_status,
                     "retry_info": test_result.get("retry_info", {})
                 },
+                "deployment": {
+                    "files_written": deployment_files,
+                    "status": deployment_status,
+                    "deployed": deployed,
+                    "backend_url": backend_url,
+                    "frontend_url": frontend_url,
+                    "deployment_time": deployment_time_str,
+                    "deployment_result": deployment_result
+                },
                 "overall_status": success_rate,
                 "total_files": total_files
             },
@@ -397,6 +584,7 @@ Output Directory: {output_dir}
                 "developer_log": developer_log[:5000],
                 "frontend_log": frontend_log[:5000],
                 "qa_log": qa_log[:5000],  # QA Bee log
+                "devops_log": devops_log[:5000],  # DevOps Bee log
                 "combined_log": combined_log[:10000]
             },
             "created_at": datetime.utcnow().isoformat()
@@ -421,10 +609,20 @@ Output Directory: {output_dir}
             code={
                 "output_directory": output_dir,
                 "backend": backend_result.get("file_stats", {}),
-                "frontend": frontend_result.get("file_stats", {})
+                "frontend": frontend_result.get("file_stats", {}),
+                "deployment": {"files_written": deployment_files}
             },
             agent_log=combined_log,
-            created_at=datetime.fromisoformat(generation_data["created_at"])
+            created_at=datetime.fromisoformat(generation_data["created_at"]),
+            deployed=deployed,
+            deployment_status={
+                "backend": "live" if backend_url else "pending" if request.deploy else "not_attempted",
+                "frontend": "live" if frontend_url else "pending" if request.deploy else "not_attempted"
+            } if request.deploy or deployed else None,
+            backend_url=backend_url,
+            frontend_url=frontend_url,
+            deployment_time=deployment_time_str,
+            deployment_configs_ready=deployment_files > 0
         )
 
     except HTTPException:
