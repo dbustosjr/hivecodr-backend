@@ -65,6 +65,37 @@ async def health_check():
     )
 
 
+@app.get(
+    "/debug/anthropic",
+    tags=["Debug"],
+    summary="Test Anthropic API connection",
+    description="Debug endpoint to test ChatAnthropic initialization and API calls"
+)
+async def debug_anthropic():
+    """Debug endpoint to test Anthropic API."""
+    import os
+    from langchain_anthropic import ChatAnthropic
+
+    result = {
+        "api_key_set": bool(os.getenv("ANTHROPIC_API_KEY")),
+        "model": settings.CLAUDE_MODEL,
+        "test_status": "pending"
+    }
+
+    try:
+        llm = ChatAnthropic(model=settings.CLAUDE_MODEL, max_tokens=50)
+        result["initialization"] = "success"
+
+        response = llm.invoke("Say hello")
+        result["test_status"] = "success"
+        result["response"] = response.content
+    except Exception as e:
+        result["test_status"] = "failed"
+        result["error"] = f"{type(e).__name__}: {str(e)}"
+
+    return result
+
+
 # Include API routers
 app.include_router(
     generate_router,
