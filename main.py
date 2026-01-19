@@ -135,28 +135,23 @@ async def debug_anthropic():
 async def debug_architect_bee():
     """Debug endpoint to test Architect Bee initialization."""
     import os
-    import httpx
     from langchain_anthropic import ChatAnthropic
 
     result = {
         "api_key_set": bool(os.getenv("ANTHROPIC_API_KEY")),
         "model": settings.CLAUDE_MODEL,
         "http2_enabled": True,
+        "monkey_patch_active": httpx.Client.__init__ != _original_httpx_client_init,
         "test_status": "pending"
     }
 
     try:
-        # Create HTTP client with HTTP/2 support (same as Architect Bee)
-        http_client = httpx.Client(
-            http2=True,
-            timeout=120.0,
-            limits=httpx.Limits(
-                max_keepalive_connections=5,
-                max_connections=10
-            )
-        )
+        # Test if monkey-patch works by creating a client
+        test_client = httpx.Client()
+        result["test_client_http2"] = getattr(test_client, '_http2', 'unknown')
+        test_client.close()
 
-        # Initialize ChatAnthropic with HTTP/2 (same as Architect Bee)
+        # Initialize ChatAnthropic (should automatically use monkey-patched HTTP/2)
         model = ChatAnthropic(
             model=settings.CLAUDE_MODEL,
             temperature=0.7,
@@ -164,10 +159,6 @@ async def debug_architect_bee():
             timeout=120.0,
             max_retries=3
         )
-
-        # Workaround: Manually assign HTTP/2 client to internal Anthropic client
-        # See: https://github.com/langchain-ai/langchain/issues/30146
-        model._client._client = http_client
         result["initialization"] = "success"
 
         # Test API call
@@ -178,7 +169,7 @@ async def debug_architect_bee():
         result["test_status"] = "failed"
         result["error"] = f"{type(e).__name__}: {str(e)}"
         import traceback
-        result["traceback"] = traceback.format_exc()
+        result["traceback"] = traceback.format_exc()[:2000]
 
     return result
 
