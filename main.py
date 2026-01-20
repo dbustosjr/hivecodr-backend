@@ -126,6 +126,40 @@ async def debug_anthropic():
     return result
 
 
+@app.post(
+    "/debug/test-generation",
+    tags=["Debug"],
+    summary="Test generation without auth (debug only)",
+    description="Debug endpoint to test complete 5-bee workflow without authentication"
+)
+async def debug_test_generation():
+    """Debug endpoint to test generation workflow."""
+    from app.agents.architect_bee import ArchitectBeeAgent
+
+    try:
+        print("[DEBUG] Starting test generation...")
+
+        # Simple test with Architect Bee only
+        architect = ArchitectBeeAgent()
+        result = architect.analyze_requirements(
+            "Build a simple task API with create, read, update, delete tasks"
+        )
+
+        return {
+            "status": "success",
+            "message": "Architect Bee completed successfully",
+            "tables_count": len(result["specification"].get("database_schema", {}).get("tables", [])),
+            "endpoints_count": len(result["specification"].get("api_endpoints", []))
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "error": f"{type(e).__name__}: {str(e)}",
+            "traceback": traceback.format_exc()[:1000]
+        }
+
+
 @app.get(
     "/debug/architect-bee",
     tags=["Debug"],
