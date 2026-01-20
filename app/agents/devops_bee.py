@@ -63,7 +63,7 @@ class DevOpsBeeAgent:
                 "health checks, and zero-downtime deployments. You always follow the 12-factor "
                 "app methodology and ensure configurations are production-ready."
             ),
-            verbose=True,
+            verbose=False  # Disabled to reduce Railway log volume,
             allow_delegation=False,
             llm=self.model
         )
@@ -259,7 +259,7 @@ All files must be production-ready with no placeholders.
         crew = Crew(
             agents=[agent],
             tasks=[task],
-            verbose=True
+            verbose=False  # Disabled to reduce Railway log volume
         )
 
         result = crew.kickoff()

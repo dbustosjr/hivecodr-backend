@@ -237,7 +237,7 @@ Return ONLY the Python code for main.py, no JSON, no markdown, just the code.
                 "models, routes, and error handling. You follow best practices "
                 "and write secure, maintainable code."
             ),
-            verbose=True,
+            verbose=False  # Disabled to reduce Railway log volume,
             allow_delegation=False,
             llm=self.model
         )
@@ -449,7 +449,7 @@ Each value should be the complete file content as a string.
             crew = Crew(
                 agents=[agent],
                 tasks=[task],
-                verbose=True
+                verbose=False  # Disabled to reduce Railway log volume
             )
 
             # Execute the crew

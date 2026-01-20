@@ -66,7 +66,7 @@ You create clean, maintainable code following Next.js and React best practices. 
 - Follow the Single Responsibility Principle
 
 You always generate COMPLETE, working code - never placeholders or TODOs.""",
-            verbose=True,
+            verbose=False  # Disabled to reduce Railway log volume,
             allow_delegation=False,
             llm=self.model
         )
@@ -326,7 +326,7 @@ Generate production-ready, complete code for every single file. Make it beautifu
         crew = Crew(
             agents=[agent],
             tasks=[task],
-            verbose=True
+            verbose=False  # Disabled to reduce Railway log volume
         )
 
         print(f"Frontend Bee generating Next.js application...")

@@ -58,7 +58,7 @@ class ArchitectBeeAgent:
                 "well-structured technical specifications. You consider data relationships, "
                 "scalability, security, and best practices in every design decision."
             ),
-            verbose=True,
+            verbose=False,  # Disabled to reduce Railway log volume
             allow_delegation=False,
             llm=self.model
         )
@@ -334,7 +334,7 @@ Return ONLY valid JSON, no markdown code blocks, no additional text. Ensure prop
             crew = Crew(
                 agents=[agent],
                 tasks=[task],
-                verbose=True
+                verbose=False  # Disabled to reduce Railway log volume
             )
 
             # Execute the crew

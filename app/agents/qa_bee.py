@@ -734,7 +734,7 @@ Return ONLY the Python code, no markdown.
                 "and write tests that catch bugs early and ensure code quality across the entire stack. "
                 "You follow testing best practices and write tests that serve as documentation."
             ),
-            verbose=True,
+            verbose=False  # Disabled to reduce Railway log volume,
             allow_delegation=False,
             llm=self.model
         )
@@ -834,7 +834,7 @@ Return a summary of the tests generated and estimated coverage.
             crew = Crew(
                 agents=[agent],
                 tasks=[task],
-                verbose=True
+                verbose=False  # Disabled to reduce Railway log volume
             )
 
             # Execute the crew (for logging purposes)
